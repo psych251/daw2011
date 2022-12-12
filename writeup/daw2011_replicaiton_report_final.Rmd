@@ -1,0 +1,584 @@
+---
+title: "Replication of the behavioural experiment in Daw et al (2001, Neuron)"
+author: "Ryan Yan (ryany98@stanford.edu)"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: cosmo
+    highlight: tango
+---
+
+<style type="text/css">
+  body{
+  font-size: 12pt;
+}
+</style>
+
+```{r include = FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggpubr)
+library(simr)
+library(lme4)
+library(lmtest)
+library(qualtRics)
+library(patchwork)
+library(ggpmisc)
+library(knitr)
+```
+
+## 1 Introduction
+### 1.1 Background
+It has long been argued that human decision making consists of two distinct computational systems, one being computationally efficient but inflexible (model-free reinforcement learning), while the other is flexible but computationally expensive (model-based reinforcement learning). However, it is unknown whether humans utilize both systems simultaneously. 
+
+### 1.2 This paper
+Daw et al. (2011) designed a novel two-stage task that can disambiguate a participant's use of model-free and model-based strategies. This is because the two strategies hypothesized different effect of second-stage reinforcement on first-stage choices. Using hierarchical logistic regression on first-stage choice data, the authors found evidence of both model-free and model-based valuations, which was further confirmed by analysis of fMRI data.
+
+### 1.3 Justification
+The original study used fMRI and the sample size was limited (N=17), therefore it is worth replicating in a larger, out-of-scanner sample. It is also unknown whether the feature of web-based study will lead to similar engagement of the two systems, or will shift participants' strategy towards one system.
+
+### 1.4 Stimuli and Procedure
+Participants will be recruited from the online platform Prolific. On each trial (Figure 1A), participants are shown two Tibetan characters. Participants use the F and J keys to choose one of the two characters. After this, another two Tibetan characters will be shown probablistically, according to the transition matrix shown in Figure 1B. The participants again use the F and J keys to select one of two second-stage characters. Depending on the reward probability of each second-stage stimulus, the participants either get a reward ($1) or none, 1% of which (1 cent) will be paid towards their compensation. To encourage continuous learning, the reward probabilities of the four second-stage choices vary with a Gaussian random walk.Prior to the study, participants are informed that the reward probabilities will change, while the transition probabilities from the first- to second-stage stimuli remain fixed.
+**Different from the original study**, after completing the task, participants will fill out the Temporal Experience of Pleasure Scale, an 18-item questionnaire that assess capacity for anticipatory and consummatory pleasure. This is based on my previous work that capacity for anticipatory pleasure may reduce model-based learning.
+
+![Figure 1. (A) The interface of the two-step task. (B) The transition matrix. The first first-stage character has a 70% chance to lead to the pink set, and 30% chance to lead to the blue set; the second first-stage character has a 30% chance to lead to the pink set, and 70% chance to lead to the blue set.  ](/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/fig1.png){width=80%}
+
+### 1.5 Challenges
+The main challenge is to code this task by adapting the open materials from another similar study:  <https://github.com/wkool/tradeoffs/tree/master/tasks/space_daw_task>. A second challenge to reduce the trial length (the original study was set to be slow to adapt to the sampling rate of fMRI) while still ensuring comparability with the original study.
+
+### 1.6 Links
+Link to the experiment on AWS:
+<http://ryanyan-daw2011-replication-project-psych251.s3-website-us-west-2.amazonaws.com>
+
+Project repository (on Github):
+<https://github.com/psych251/daw2011>
+
+Original paper:
+<https://github.com/psych251/daw2011/blob/main/original_paper/daw2011.pdf>
+
+Preregistration:
+<https://osf.io/t4zmr>
+
+## 2 Methods
+
+### 2.1 Power Analysis
+
+The author only reported the p value from the multilevel logistic regression; the original effect size was not reported. I was thus unable to obtain a power calculation from the original study.
+
+I obtained regression coefficient estimations from another paper, whose senior author was a second author on this target paper. This other paper used the same task structure but with different materials and framing (Kool, Cushman, & Gershman, 2016). Based on N = 185 online participants, the estimates were: intercept (1.03), reward (0.26), transition (0.03), and reward*transition (0.20). The effect size calculation was  based on these estimates, and a within-subject random intercept of 0.5. 
+
+Power analysis revealed that a sample size of 110 is needed to achieve 80% power.
+
+```{r eval=FALSE, echo=TRUE}
+subj <- factor(1:10)
+reward <- c("Reward","noReward") # ratio ~~ 1:1
+transition <- c(rep("common",7), rep("rare",3)) # ratio = 7:3
+trialNum <- 200
+# total trial num: 200
+# rewardCommon:Rewardrare:noRewardCommon:nonRewardrare = 7:3:7:3 * 10
+
+subj_full = rep(subj, trialNum)
+reward_full <- rep(reward, each=length(subj)*(trialNum/2))
+transition_full <- rep(rep(transition, each=length(subj)), (trialNum/10))
+
+sim_df <- data.frame(id=subj_full,reward=reward_full, transition=transition_full)
+# table(sim_df)
+
+## Intercept and slopes for reward, transition, and reward*transition
+fixed <- c(1.03,0.26,0.03,0.20)
+
+## Random intercepts for participants
+rand <- list(0.5)
+
+model <- makeGlmer(y ~ reward*transition + (1|id),family = "binomial", fixef=fixed, VarCorr=rand, data=sim_df)
+sim_10_subj <- powerSim(model, nsim=100, test = fixed("rewardReward:transitionrare"))
+sim_10_subj
+
+model_ext_subj <- extend(model, along="id", n=120)
+sim_120_subj <- powerSim(model_ext_subj, nsim=120, test = fixed("rewardReward:transitionrare"))
+sim_120_subj
+
+p_curve_treat <- powerCurve(model_ext_subj, test = fixed("rewardReward:transitionrare"), along="id")
+png(file="/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/power_analysis.png",
+width=8, height=6, units="in", res=300)
+plot(p_curve_treat)
+```
+
+![Figure 2. Power analysis. Based on the estimates reported by Kool, Cushman & Gershman (2016), 120 participants could attain a power of 80%. ](/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/power_analysis.png){width=60%}
+
+
+### 2.2 Planned Sample
+
+Considering both the original sample size (N = 17), the calculated power based on the above-mentioned paper (N = 110), the sample will be N = 40 (50% female) healthy adults recruited via Prolific. The participants need to be fluent in English, but don't need to be of a certain nationality.
+
+### 2.3 Materials
+
+The experimental materials are 3 pairs of Tibetan characters in colored boxes, as shown in Figure 1. In the practice trials, participants use a different set of such stimuli.The details of the experiment is described below in 2.4.
+
+In addition, participants will fill out an 18-item questionnaire assessing hedonic capacity. The Temporal Experience of Pleasure Scale (TEPS) measures people’s capacity to experience anticipatory and consummatory pleasure (Gard et al., 2006).
+
+### 2.4 Procedure	
+The task consisted of 99 trials, in three blocks of 33, separated by breaks. Each trial consisted of two stages. In the first stage, participants choose between two options, represented by Tibetan characters in colored boxes. If subjects failed to enter a choice within 2s, the trial was aborted. Which second-stage state was presented depended, probabilistically, on the first-stage choice, according to the transition scheme shown in Figure 1B (30% vs. 70% transition probability). At the second stage, subjects were presented with either of two more choices between two options ('states'), and entered another choice. The second choice was rewarded with money (depicted by a dollar coin, though subjects were paid 1% of this amount), or not (depicted by a zero). Trials were separated by an inter-trial interval of randomized length, on average about 1.5 second.
+
+In order to encourage ongoing learning, these reward probabilities were diffused at each trial by adding independent Gaussian noise (mean 0, SD 0.025), with reflecting boundaries at 0.25 and 0.75.
+Prior to the task, participants were instructed that the reward probabilities would change, but those controlling the transitions from the first to the second stage would remain fixed. They were also instructed about the overall structure of the transition matrix, specifically, that each first-stage option was primarily associated with one or the other of the second-stage states, but not which one. 
+Prior to the session, to familiarize themselves with the structure of the task, subjects played 10 trials (**original paper: 50 trials**) on a practice task using a different stimulus set. The assignment of colors to states was counterbalanced across participants, and the two options at each state were permuted between left and right from trial to trial. Each second-stage option was rewarded according to a probability associated with that option. *Different with the original study, after the experiment, participants will complete a measure of hedonic capacity (the Temporal Experience of Pleasure Scale).* Participants get 8 dollars per hour for their participation, as well as the bonus they earn from the study.
+
+![Figure 3. Example of a Gaussian random walk ](/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/random_walk.png){width=60%}
+
+### 2.5 Analysis Plan
+
+#### Key analysis of interest
+I will run a logistic regression in which the dependent variable was the first-stage choice (coded as stay versus switch), and the explanatory variables were the reward received on the previous trial, a binary indicator variable indicating whether the previous trial’s transition was common or rare, and the interaction of the two. I will take all coefficients as random effects across subjects, and estimated this multilevel regression using the lme4 linear mixed effects package (Bates and Maechler, 2010) in the R statistical language (R Development Core Team, 2010).
+
+The key result to replicate is the significant interaction (p < 0.05) between reward and transition type in predicting first-stage choice in the following logistic regression model:
+
+    glmer(stay ~ reward * transition_type + (1 | participant_ID), data = df, family = binomial, control = glmerControl(optimizer = "bobyqa"))
+
+*reward: factor, rewarded or unrewarded, ref = rewarded*
+
+*transition_type: factor, common or rare, ref = common*
+
+#### Additional analyses
+
+Computational modelling was conducted according to Daw et al.'s (2011) method and supplementary information.
+
+In the model-free reinforcement learning model, value of all stage 1 and stage 2 choices were updated by a temporal difference prediction error signal. In the model-based reinforcement learning model, stage 1 choices were updated according to the Bellman function, which takes into consideration the transition matrix as specified above, while the stage 2 choices were updated similarly as model-free RL.
+
+In the present computational model, model-based and model-free RL both contribute to the value update, and the proportion of the contribution from model-based RL was represented as a parameter $\omega$ (0 < $\omega$ < 1). The closer $\omega$ is to 1, the larger the relative contribution of model-based RL.
+
+All parameters were estimated using the maximum likelihood method. MATLAB code is available in the Github repo under the folder "writeup/computational_modelling".
+
+### 2.6 Differences from Original Study
+
+1. ***The original study is an fMRI study, while the current study uses an online sample. This means the body posture, noise level, and response keys are different.*** We hypothesize that this should not make a difference to the results.
+2. ***The original study has a pre-fMRI training period of 50 trials, followed by 201 formal trials. Considering the characteristics of Prolific participants, which is shortened to 10 practice trials and 99 formal trials in the current study.*** Considering that participants may keep learning during the formal game session, we can conduct a sensitivity analysis on whether inclusion of the first 10~20 trials in the formal task will make a difference to the results. We hypothesize that this should not make a difference to the results.
+3. ***I adapted the time course of a trial to make it more suitable for online experiment. *** Each trial in the original study lasted around 10 seconds, and the whole experiment lasts around 30~40 minutes. However, the online study needs to be more compact to reduce participant dropout.We reduced the animation time and intertrial interval for the chosen options, while keeping the time-out time (2s) constant. We hypothesize that this should not make a difference to the results.
+4. ***A motivation-related questionnaire will be added at the end of the study.*** After the experiment, participants will fill out the TEPS questionnaire; because of this order, we do not expect any influence of this questionnaire measure on task performance.
+
+### 2.7 Methods Addendum (Post Data Collection)
+
+All participants were recruited around 12-2pm PST.
+
+#### Actual Sample
+  The actual sample includes N = 40 participants recruited from Prolific. According to Prolific, their median age was 27 yo, 72.5% were male, and 87.5% were white.
+
+```{r message=FALSE}
+#read in demographic data
+df_demo <- read_csv("/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/data/demo.csv")%>%
+  filter(Status == "APPROVED")%>%
+  select(Age, Sex,"Ethnicity simplified")
+```
+
+```{r}
+quantile(df_demo$Age)
+table(df_demo$Sex)/nrow(df_demo)
+table(df_demo$"Ethnicity simplified")/nrow(df_demo)
+```
+
+#### Differences from pre-data collection methods plan
+  
+  **The sample was recruited as a standard sample on Prolific, instead of the gender-balanced sample in the pre-registration.**
+  
+## 3 Results
+
+### 3.1 Data preparation
+#### read in and organize data (pilot data were manually removed already)	
+```{r error=FALSE, warning=FALSE, message=FALSE}
+data_folder <- "/Users/rh/Desktop/first_year/PSYCH251_MF/data/aws/task-data-sav/ryanyan-daw2011-replication-project-psych251/"
+
+# read in and combine data files from all participants
+data_list <- list.files(data_folder)
+
+for (i in 1:length(data_list)){
+  data_name_temp <- data_list[i]
+  data_temp <- read_csv(paste0(data_folder,data_name_temp))%>%
+    filter(trial_type == "daw_two_step", practice != 1)%>%
+    mutate(trial_in_total = (block-1)*33+trial_index)%>%
+    select(-rt,-responses,-view_history,-age:-scoreindollar,-subid,-internal_chunk_id,-url)
+  demo_temp <- read_csv(paste0(data_folder,data_name_temp))%>%
+    filter(trial_type == "call-function", !is.na(age))%>%
+    select(participant_id,age:scoreindollar)%>%
+    mutate(sex = ifelse(sex==FALSE,"female",'male'))
+  
+  #join files
+  if (i==1){
+    trial_data_raw = data_temp
+    demo_data = demo_temp
+  } else {
+    trial_data_raw = rbind(trial_data_raw,data_temp)
+    demo_data = rbind(demo_data,demo_temp)
+  }
+}
+
+#print number of participants
+participant_num = nrow(demo_data)
+participant_num
+```
+
+#### bonus payment
+```{r message = FALSE}
+payment_sheet = demo_data[,c(1,5)]
+# show distribution of bonus payments
+ggplot(payment_sheet,aes(scoreindollar))+
+  geom_histogram(binwidth=0.01,fill="white",color="black")+
+  geom_vline(xintercept = mean(payment_sheet$scoreindollar),size=2,color="blue")+
+  labs(x = "payment in dollars",
+       title = paste0("min: $",min(payment_sheet$scoreindollar),", max: $",max(payment_sheet$scoreindollar),", mean: $",mean(payment_sheet$scoreindollar)))
+```
+
+#### substitute prolific ID for unidentifiable ID
+```{r}
+set.seed(123) #to ensure consistency in encoding
+
+all_possible_ids <- c(trial_data_raw$participant_id) %>% unique() %>% na.omit()
+
+# randomly sample three-digit numbers (between 100 and 1000) with no replacement
+random_ids <- sample(100:1000, length(all_possible_ids), replace = F) %>% as.character()
+
+#save dictionary locally 
+id_dictionary <- cbind(all_possible_ids, random_ids) %>% `colnames<-`(c("old", "new")) %>% as.data.frame()
+
+write_csv(id_dictionary,"/Users/rh/Desktop/first_year/PSYCH251_MF/id_dictionary.csv")
+```
+
+#### Exclusion criteria
+
+**The original paper did not mention any data exclusion.** Trials where participants fail to respond within 2 seconds will be automatically excluded.
+
+As a robustness check, I will examine whether the main hypothesis is still true even after (1) excluding those participants who failed more than 10% of all trials (10 trials), and (2) excluding the first 20 trials of the task as practice.
+
+```{r include = FALSE}
+#substitute ids
+trial_data_raw <- trial_data_raw%>%
+  rename(old = participant_id)%>% 
+  left_join(id_dictionary, by = "old")%>%
+  select(-old)%>%
+  rename(participant_id = new)
+
+#inspect number of invalid trials
+df_invalid_trials <- count(trial_data_raw%>%
+  group_by(participant_id),(rt_1 == -1)|(rt_1 != -1 & rt_2 ==-1))%>%
+  rename(timeOutTrials = "(rt_1 == -1) | (rt_1 != -1 & rt_2 == -1)")%>%
+  filter(timeOutTrials == TRUE)
+
+#clean timeout trials
+trial_data_raw$win[which(trial_data_raw$win == -1)] <- NA
+trial_data_raw$choice1[which(trial_data_raw$choice1 == -1)] <- NA
+trial_data_raw$choice2[which(trial_data_raw$choice2 == -1)] <- NA
+
+# the variable "win" is odd. some are lower case.needs to be converted.
+trial_data_raw$win <- tolower(trial_data_raw$win)
+
+# add in variable for whether last trial was rewarded
+# add in variable for stay
+# add in variable for key press
+trial_data_raw <- trial_data_raw%>%
+  group_by(participant_id,block)%>%
+  mutate(last_rewarded = ifelse(is.na(trial_index) == FALSE & trial_index != 0, lag(win), NA))%>%
+  mutate(stay = ifelse(is.na(trial_index) == FALSE & trial_index != 0,choice1==lag(choice1),NA))%>%
+  mutate(key_press2 = ifelse(key_press == 70,'f',ifelse(key_press == 74,'j',NA)))
+
+#write data to read in MATLAB for computational modelling
+trial_data_MATLAB <- trial_data_raw%>%
+  filter(rt_1 != -1, rt_2 != -1, 
+         rt_1 > 100, rt_2 > 100)%>%
+  select(participant_id,block,trial_index,choice1,choice2,win,state2_color)%>%
+  mutate(win = ifelse(win == "true",1,ifelse(win == "false",0,NA)))%>%
+  group_by(participant_id)%>%
+  mutate(trial_index_global = row_number())%>%
+  pivot_longer(choice1:choice2, names_to = "stage", names_pattern = "choice(.*)",values_to = "choice")
+
+write_csv(trial_data_MATLAB,"/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/data/wrapper/df_MATLAB.csv")
+write_csv(trial_data_raw,"/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/data/wrapper/trial_data_raw.csv")
+#filter data (this should be conducted AFTER ADDING STAY VARIABLE)
+trial_data <- trial_data_raw%>%
+  filter(rt_1 != -1, rt_2 != -1, 
+         rt_1 > 100, rt_2 > 100)
+```
+
+```{r}
+ggplot(df_invalid_trials,aes(x=n))+
+  geom_histogram(color = "black",fill = "white")+
+  labs(title = "count of invalid trials (time out after 2s)",
+       x = "trial count")
+```
+
+<!-- #### show an example of the trace of reward probability over time -->
+<!-- ```{r} -->
+<!-- reward_prob_example <- trial_data_raw%>%filter(participant_id == id_dictionary$new[1])%>% -->
+<!--   select(reward_prob1:reward_prob4,trial_index,trial_in_total)%>% -->
+<!--   ungroup()%>% -->
+<!--   pivot_longer(reward_prob1:reward_prob4, names_to = "choice", names_pattern = "reward_prob(.*)",values_to = "prob") -->
+
+<!-- ggplot(reward_prob_example,aes(x = trial_in_total,y = prob, color = choice))+ -->
+<!--   geom_line(size=1.5)+ -->
+<!--   scale_color_brewer(palette = "RdBu")+ -->
+<!--   labs(title = "reward probability over time", -->
+<!--     subtitle = "red and blue suggest different second-stage stimuli set") -->
+<!-- ``` -->
+
+#### manipulation check: transition matrix should be 0.3:0.7:0.7:0.3
+```{r}
+kable(count(trial_data%>%
+        filter(!is.na(trial_index))%>%
+        group_by(choice1), state2_color)%>%
+  group_by(choice1)%>%
+  mutate(prob = round(n/sum(n),3))%>%
+  select(-n)%>%
+  pivot_wider(names_from = state2_color, values_from = prob))
+```
+
+The transition matrix looks fine.
+
+#### keypress pattern: left and right should be relatively balanced (50:50)
+```{r}
+# count the left and right key press freq
+df_key <- count(trial_data%>%
+        ungroup(),participant_id,key_press2)%>%
+  pivot_wider(names_from = key_press2, values_from = n)
+
+ggplot(df_key,aes(x=f))+
+  geom_histogram(fill="white",color = "black")+
+  xlim(0,99)+
+  geom_vline(xintercept = 49.5,size=2,color = "blue")+
+  labs(title = "freq pressing left key")
+```
+
+The key press pattern looks fine.
+
+#### participants' choice of first-stage character should be balanced (50:50)
+```{r}
+choice1_freq <- count(trial_data%>%
+        ungroup(),participant_id,choice1)%>%
+  pivot_wider(names_from = choice1, names_prefix = "option", values_from = n)
+
+ggplot(choice1_freq,aes(x = option1))+
+  geom_histogram(color="black", fill="white")+
+  labs(title="preference to option 1 in stage 1 (vs. option 2)")+
+    geom_vline(xintercept = 49.5,size=2,color = "blue")
+```
+
+Some participants showed preference towards one of the two stage 1 options.
+
+### 3.2 (H1) Confirmatory analysis
+**Hypothesis 1** : significant interaction between reward and transition type, so that rewardUnrewarded:transitionRare has a significant positive estimate (p < 0.05)
+
+```{r message = FALSE, echo = TRUE}
+# this function shifts the lower bound of the y axis around in a ggplot
+shift_trans = function(d = 0) {
+  scales::trans_new("shift", transform = function(x) x - d, inverse = function(x) x + d)
+}
+```
+
+```{r message = FALSE}
+# count "stay" frequency for plotting
+ind_sum_data <- count(trial_data%>%
+  filter(!is.na(last_rewarded))%>%
+  group_by(last_rewarded,common,stay),participant_id)%>%
+  group_by(participant_id,last_rewarded,common)%>%
+  mutate(trial_num = sum(n),
+         stay_prob = n/trial_num)%>%
+  mutate(common = ifelse(common == 1, "common", "rare"),
+         last_rewarded = ifelse(last_rewarded == "true","rewarded","unrewarded"))
+
+#compute summary stats
+fig3_data <- ind_sum_data%>%
+  group_by(last_rewarded,common)%>%
+  filter(stay == TRUE)%>%
+  summarise(mean_stay_prob = mean(stay_prob),
+         sd_stay_prob =sd(stay_prob,na.rm = TRUE),
+         se_stay_prob = sd_stay_prob/sqrt(participant_num))
+
+fig3_data$common <- factor(fig3_data$common, levels = c("common","rare"))
+
+ggplot(fig3_data,aes(x = last_rewarded, y = mean_stay_prob, group = common, fill = common))+
+  geom_col(position = position_dodge2(preserve = "single", padding = 0.1))+
+  scale_fill_manual(values = c("blue","red"))+
+  scale_x_discrete(limits = c("rewarded","unrewarded"))+
+  geom_errorbar(aes(ymin=mean_stay_prob-se_stay_prob, ymax=mean_stay_prob+se_stay_prob), width=.2,position=position_dodge(.9),size=1) +
+  theme_bw()+
+  scale_y_continuous(trans = shift_trans(0.5),limits = c(NA, 1),breaks=c(0.5,0.75,1))
+```
+
+![Figure 4. Results in the original study](/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/fig2.png){width=50%}
+
+Next, we will plot some participants' individual data to see how it looks.
+
+#### plot four random individual participants as examples
+```{r echo = FALSE, message = FALSE}
+set.seed(123) # keep sampling consistent
+rand_subj <- sample(id_dictionary$new,4)
+
+myplots <- list()  # new empty list
+for (p in 1:length(rand_subj)){
+  p1 <- eval(substitute(
+    ggplot(ind_sum_data%>%filter(participant_id==rand_subj[p])%>%
+  group_by(last_rewarded,common)%>%
+  filter(stay == TRUE)%>%
+  summarise(mean_stay_prob = mean(stay_prob),
+         sd_stay_prob =sd(stay_prob,na.rm = TRUE),
+         se_stay_prob = sd_stay_prob/sqrt(participant_num)),aes(x = last_rewarded, y = mean_stay_prob, group = common, fill = common))+
+  geom_col(position = position_dodge2(preserve = "single", padding = 0.1))+
+  scale_fill_manual(values = c("blue","red"))+
+      scale_x_discrete(limits = c("rewarded","unrewarded"))+
+  theme_bw()+
+  scale_y_continuous(trans = shift_trans(0.2),limits = c(NA, 1),breaks=c(0.5,0.75,1)) ,
+        list(p = p)))+
+    labs(title = paste("participant",rand_subj[p]))
+  
+  myplots[[p]] <- p1  # add each plot into plot list
+}
+
+# plot the four participants with patchwork package
+(myplots[[1]]+myplots[[2]])/(myplots[[3]]+myplots[[4]])
+```
+
+It seems that some participants (e.g., 701) were more model-based than others.
+
+#### logistic regression
+```{r}
+#make dataframe
+trial_data_glmer <- trial_data%>%
+  select(participant_id,trial_index,stay,block,last_rewarded,common,choice1)%>%
+  mutate(common = ifelse(common == 1, "common", "rare"))
+
+trial_data_glmer$common <- factor(trial_data_glmer$common, levels = c("common","rare"))
+
+glm1 <- glmer(stay ~ last_rewarded * common + (1 | participant_id), data = trial_data_glmer, family = binomial, control = glmerControl(optimizer = "bobyqa"))
+
+kable(summary(glm1)$coefficients)
+```
+
+The main effect of reward is significant, $/beta $ = 0.374, p = .007. The main effect of transition type (common) was not significant, $/beta $ = -0.184, p = 0.116. The interaction between reward and transition type was not significant, $/beta $ = 0.053, p = 0.750.
+
+#### Robuseness check 
+
+**(exclude bad-performing participants who have missed more than 10% trials and who prefer one first-stage choice, and the first 20 trials as practice)**
+
+```{r message = FALSE, result = 'hide'}
+# exclude a participant if they have >= 10 invalid trials
+participant_screen <- count(trial_data_raw%>%
+                              group_by(participant_id)%>%
+  mutate(timeout = (rt_1 == -1) | (rt_1 != -1 & rt_2 == -1)),timeout)%>%
+  filter(timeout == TRUE)%>%
+  filter(n >= 10)%>%
+    select(participant_id)
+
+# exclude first 20 trials as practice
+ind_sum_data_r <- count(trial_data%>%
+  filter(!participant_id %in% participant_screen$participant_id) %>%       
+  filter(!is.na(last_rewarded),trial_in_total >= 20)%>%
+  group_by(last_rewarded,common,stay),participant_id)%>%
+  group_by(participant_id,last_rewarded,common)%>%
+  mutate(trial_num = sum(n),
+         stay_prob = n/trial_num)%>%
+  mutate(common = ifelse(common == 1, "common", "rare"),
+         last_rewarded = ifelse(last_rewarded == "true","rewarded","unrewarded"))
+
+#summary stats
+fig3_data_r <- ind_sum_data_r%>%
+  group_by(last_rewarded,common)%>%
+  filter(stay == TRUE)%>%
+  summarise(mean_stay_prob = mean(stay_prob),
+         sd_stay_prob =sd(stay_prob,na.rm = TRUE),
+         se_stay_prob = sd_stay_prob/sqrt(participant_num))
+
+fig3_data_r$common <- factor(fig3_data_r$common, levels = c("common","rare"))
+
+ggplot(fig3_data_r,aes(x = last_rewarded, y = mean_stay_prob, group = common, fill = common))+
+  geom_col(position = position_dodge2(preserve = "single", padding = 0.1))+
+  scale_fill_manual(values = c("blue","red"))+
+  scale_x_discrete(limits = c("rewarded","unrewarded"))+
+  geom_errorbar(aes(ymin=mean_stay_prob-se_stay_prob, ymax=mean_stay_prob+se_stay_prob), width=.2,position=position_dodge(.9),size=1) +
+  theme_bw()+
+  scale_y_continuous(trans = shift_trans(0.4),limits = c(NA, 1))
+
+trial_data_glmer_r <- trial_data%>%
+  filter(!participant_id%in%participant_screen$participant_id)%>%
+  select(participant_id,trial_index,stay,block,last_rewarded,common,choice1)
+
+glm1_r <- glmer(stay ~ last_rewarded * common + (1 | participant_id), data = trial_data_glmer_r, family = binomial, control = glmerControl(optimizer = "bobyqa"))
+
+kable(summary(glm1_r)$coefficients)
+```
+
+Robustness check revealed the same pattern of results.
+
+### 3.3 (H2-H3) Exploratory analyses
+#### (H2, H3) additional analysis of logistic regression
+The two following hypotheses from Daw et al. (2011), but it's secondary to the interaction hypothesis in **hypothesis 1**:
+
+**Hypothesis 2** : significant positive main effect of rewardRewarded (p < 0.05)
+
+**Hypothesis 3** : non-significant main effect of transition_typeCommon 
+
+**These two hypotheses are supported by the data.**
+
+More use of model-free strategy is correlated with higher TEPS-ANT, i.e., greater self-reported anticipation for future pleasure.
+
+### 3.4 computational modelling
+
+#### Computational simulation  demonstrated the differential value update of two types of RL algorithm 
+
+1. (Left) The model-free algorithm only updates one first-stage option at a time.
+
+2. (Right) The model-based algorithm based on Bellman's equation updates two options simultaneously, because of its understanding of the task structure.
+
+![Figure 4. Computational Modelling. **(focus on the shaded area, trial 63~81)**](/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/writeup_resources/simulation.png){width=80%}
+
+#### weight parameter $\omega$
+
+$\omega$ is a parameter in the reinforcement learning model controlling the relative contribution of model-based process. to the value computation. Larger $\omega$ suggests smaller contribution of model-based process.
+
+```{r warning = FALSE}
+df_params_estimate <- read_csv("/Users/rh/Desktop/first_year/PSYCH251_MF/daw2011/writeup/data/RL_learn_params_out.csv")
+
+# ggplot(df_params_estimate%>%
+#   mutate(id = row_number())%>%
+#   pivot_longer(expected_alpha1:expected_omega,names_to = "param", names_prefix = "expected_", values_to = "val"),
+#   aes(x = param, y = val, color = param))+
+#   geom_violin()+
+#   geom_jitter(size=2)+
+#   stat_summary()
+
+ggplot(df_params_estimate,aes(x=1,y=expected_omega))+
+  geom_violin()+
+  geom_jitter(size=2, shape=1)+
+  stat_summary()+
+  geom_hline(yintercept = 0.5, color = "red")+
+  labs(title = "weighting of model-based RL",
+       y= "omega" ,x="")+
+  ylim(0,1)
+
+quantile(df_params_estimate$expected_omega, probs = c(0.25,0.5,0.75))
+```
+
+**Conclusion from computational modelling**: although the interaction between reward and transition type was not replicated in the bar plots and the logistic regression, according to a reinforcement learning model with hybrid value update, the contribution of model-based RL is smaller than 50%, but non-zero. The estimated $omega$ from the current study (0.28, 25%/75% quantile 0.22/0.45) was smaller than that of the original paper (0.39, 25%/75% quantile 0.29/0.59).
+
+## 4 Discussion
+
+### Summary of Replication Attempt
+
+In this study, I sought to replicate the behavioural outcome in Daw et al. (2011). Specifically, we hypothesized  significant interaction between reward and transition type in the logistic regression model (H1).
+
+> There is no significant interaction between reward and transition type. H1 was rejected.
+
+In addition, we hypothesized that there is a positive main effect of reward (H2), but no significant main effect of transition type (H3) in the logistic regression model.
+
+> There is a significant and positive main effect of reward, but no significant main of transition type. H2 and H3 were accepted.
+
+> Finally, we conducted RL model and extracted a 'weight' parameter for model-based strategy. This parameter (median = 0.29) is between 0 and 0.5, suggesting a smaller contribution of model-based than model-free strategy.
+
+### Commentary
+
+#### A shift towards model-free strategy in web-based study
+Online studies may involve lower attention, lower motivation, lower cognitive effort than in-person studies, all of which may shift the strategy towards more model-free.
+
+#### Truncated trial number compromises the detection of individual-level effect.
+Model-based strategy may require expertise and hence more practice. The original study used 200 trials (+50 practice trials), while this replication only used 100 trials (+10 practice trials). This may have compromised the model-based strategy.
+
+#### "What a difference a coin make"
+The low motivation in online studies was exacerbated by the fact that the present study only reward $0.01 for each coin earned in the task, making the difference between using different strategies negligible. Under low incentive, participants will incline towards the less cognitively expensive strategy. This phenomenon was also reported by a previous rodent study (Song et al., 2022, PLOS computational biology).

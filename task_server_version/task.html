@@ -1,0 +1,467 @@
+<!doctype html>
+<html>
+<head>
+	<title>Sequential decision making experiment</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+	<script src="jspsych/jspsych.js"></script>
+	<link href="jspsych/css/jspsych.css" rel="stylesheet" type="text/css"></link>
+	<link href="jspsych/css/jspsych.css" rel="stylesheet" type="text/css"></link>
+	<script src="jspsych/plugins/jspsych-text.js"></script>
+	<script src="jspsych/plugins/daw_two_step.js"></script>
+	<script src="jspsych/plugins/jspsych-survey-text.js"></script>
+	<script src="jspsych/plugins/jspsych-html.js"></script>
+	<script src="jspsych/plugins/jspsych-instructions.js"></script>
+	<script src="jspsych/plugins/jspsych-call-function.js"></script>
+	<script src="additional-functions.js"></script>
+	<script src="https://sdk.amazonaws.com/js/aws-sdk-2.1.12.min.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.min.js"></script>
+	<link href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/themes/black-tie/jquery-ui.min.css" rel="stylesheet" type="text/css"></link>
+
+</head>
+<body>
+</body>
+<script>
+
+var Global = {}; //create Target dictionary to (1) record fixation time, (2)make target sample and scale have the same person and valence in every trial
+
+console.log("version 1.3 ready to run");
+
+// Initialize the Amazon Cognito credentials provider
+AWS.config.region = 'us-west-2'; // Region
+AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+    IdentityPoolId: 'us-west-2:e45fff22-73bb-4fad-89e1-e26705840bfa',
+});
+
+var workerId = getQueryVariable("workerId");
+var hitId = getQueryVariable("hitId");
+var assignmentId = getQueryVariable("assignmentId");
+
+var nrpracticetrials = 10;
+var nrtrials = 33;
+
+var vHeight = $(document).height();
+var lineSlice = $(document).width();
+
+// set up variables as
+var max = 0.75;
+var min = 0.25;
+var sd = 0.025;
+
+if(Math.random() > .5) { // 0.25-0.75 first
+	if(Math.random() > .5) {
+		var prac_reward_prob = [0.25, 0.75];
+		if(Math.random() > .5) {
+			prac_reward_prob = [prac_reward_prob, [0.4, 0.6]];
+		} else {
+			prac_reward_prob = [prac_reward_prob, [0.6, 0.4]];
+		};
+	} else {
+		var prac_reward_prob = [0.75, 0.25];
+		if(Math.random() > .5) {
+			prac_reward_prob = [prac_reward_prob, [0.4, 0.6]];
+		} else {
+			prac_reward_prob = [prac_reward_prob, [0.6, 0.4]];
+		};
+	};
+} else {
+	if(Math.random() > .5) { // 0.4-0.6 first
+		var prac_reward_prob = [0.4, 0.6];
+		if(Math.random() > .5) {
+			prac_reward_prob = [prac_reward_prob, [0.25, 0.75]];
+		} else {
+			prac_reward_prob = [prac_reward_prob, [0.75, 0.25]];
+		};
+	} else {
+		var prac_reward_prob = [0.6, 0.4];
+		if(Math.random() > .5) {
+			prac_reward_prob = [prac_reward_prob, [0.25, 0.75]];
+		} else {
+			prac_reward_prob = [prac_reward_prob, [0.75, 0.25]];
+		};
+	};
+
+}
+
+
+if(Math.random() > .5) { // 0.25-0.75 first
+	if(Math.random() > .5) {
+		var reward_prob = [0.25, 0.75];
+		if(Math.random() > .5) {
+			reward_prob = [reward_prob, [0.4, 0.6]];
+		} else {
+			reward_prob = [reward_prob, [0.6, 0.4]];
+		};
+	} else {
+		var reward_prob = [0.75, 0.25];
+		if(Math.random() > .5) {
+			reward_prob = [reward_prob, [0.4, 0.6]];
+		} else {
+			reward_prob = [reward_prob, [0.6, 0.4]];
+		};
+	};
+} else {
+	if(Math.random() > .5) { // 0.4-0.6 first
+		var reward_prob = [0.4, 0.6];
+		if(Math.random() > .5) {
+			reward_prob = [reward_prob, [0.25, 0.75]];
+		} else {
+			reward_prob = [reward_prob, [0.75, 0.25]];
+		};
+	} else {
+		var reward_prob = [0.6, 0.4];
+		if(Math.random() > .5) {
+			reward_prob = [reward_prob, [0.25, 0.75]];
+		} else {
+			reward_prob = [reward_prob, [0.75, 0.25]];
+		};
+	};
+}
+
+// console.log('prac_reward_prob = '+prac_reward_prob);
+// console.log('reward_prob = '+reward_prob);
+
+var gaussian = [];
+for (i = 0; i < 1000; i++) {
+	gaussian[i] = createMemberInNormalDistribution(0,sd);
+}
+
+
+var sex = '';
+var age = 0;
+var score = 0;
+
+/* jspsych blocks */
+
+var change_colors = {
+	type: 'call-function',
+	func: function(){
+		$('.jspsych-display-element').css('background-color', 'grey');
+		$('.jspsych-display-element').css('color', 'white');
+	}
+}
+var change_colors_back = {
+	type: 'call-function',
+	func: function(){
+		$('.jspsych-display-element').css('background-color', 'white');
+		$('.jspsych-display-element').css('color', 'black');
+	}
+}
+
+
+var enter_id = {
+    type: 'survey-text',
+    preamble: ['<h2>Welcome! </h2><br> You are directed to this webpage from Prolific. Once you finish the whole study, you will be directed back to Prolific. <br> The whole study will take around 15 minutes to complete.<br> <b> Please use a desktop computer to complete this study. </b>'],
+		questions: [['Please enter your prolific id (this is important for your validation):']],
+  };
+
+var check_id_block = {
+		chunk_type: 'while',
+		timeline: [enter_id],
+		continue_function: function(data){
+			answers = data[0].responses.split(":");
+			id = answers[1].split('"')[1];
+			console.log(id);
+			if (id.length == 24){
+				Global.ID = id;
+				jsPsych.data.addProperties({participant_id: Global.ID}); //record participant id
+				saveDataToS3();
+				return false;
+			} else {
+				alert("Please provide a valid Prolific id.");
+				return true;
+			}
+		},
+		timing_post_trial: 0,
+	};
+
+	// on_finish: function(data){
+	// 	Global.ID = JSON.parse(data.responses).Q0; //save id as global variable
+	// 	jsPsych.data.addProperties({participant_id: Global.ID}); //record participant id
+	// 	saveDataToS3();}
+
+var check_consent = function(elem) {
+		if ($('#consent_checkbox').is(':checked')) {
+			return true;
+		}
+		else {
+			alert("If you wish to participate, you must check the box next to the statement 'I agree to participate in this study.'");
+			return false;
+		}
+		return false;
+	};
+
+var consent_block = {
+		type:'html',
+		pages: [{url: "consent.html", cont_btn: "start", check_fn: check_consent}],
+		on_finish: function(data){
+			start_instructions = data.time_elapsed;
+		}
+	};
+
+var welcome = {
+	type: "instructions",
+	pages: welcome(),
+	key_forward: "j",
+	key_backward: "f",
+	show_clickable_nav: true,
+}
+var practice_intro = {
+	type: "instructions",
+	pages: practice_intro(),
+	key_forward: "j",
+	key_backward: "f",
+	show_clickable_nav: true,
+}
+
+
+var practice_block = {
+	type: "daw_two_step",
+	internal_chunk_id: 0-1,
+	block: 0,
+	reward_prob: function() {
+		alldata = jsPsych.data.getTrialsOfType('daw_two_step');
+		if (alldata.length==0) {
+			return prac_reward_prob
+		} else {
+			//drifting probabilities
+			for (j = 0; j < 2; j++) {
+				for (k = 0; k < 2; k++) {
+					prac_reward_prob[j][k] = prac_reward_prob[j][k]+gaussian[Math.floor(Math.random()*gaussian.length)];
+					prac_reward_prob[j][k] = Math.min(prac_reward_prob[j][k],Math.max(1.5 - prac_reward_prob[j][k], .25)); //reflective boundary at 0.25
+					prac_reward_prob[j][k] = Math.max(prac_reward_prob[j][k], Math.min(0.5 - prac_reward_prob[j][k], .75));//reflective boundary at 0.75
+				}
+			}
+			return prac_reward_prob
+		}
+	},
+	timing_post_trial: 0,
+	timing_response: 2000,
+	practice: 1,
+	nrtrials: nrpracticetrials,
+	subid: function(){
+		return Global.ID
+	},
+	on_finish: function(data){
+      saveDataToS3()},
+};
+
+var formal_intro = {
+	type: "instructions",
+	pages: formal_intro(),
+	key_forward: "p",
+	key_backward: "q",
+	show_clickable_nav: true,
+	on_finish: function(data){
+	}
+}
+
+var formal_block1 = {
+	type: "daw_two_step",
+	block:1,
+	internal_chunk_id: 1-1,
+	reward_prob: function() {
+		alldata = jsPsych.data.getTrialsOfType('daw_two_step');
+		if (alldata.length==nrpracticetrials) {
+			return reward_prob
+		} else {
+			//drifting probabilities
+			for (j = 0; j < 2; j++) {
+				for (k = 0; k < 2; k++) {
+					reward_prob[j][k] = reward_prob[j][k]+gaussian[Math.floor(Math.random()*gaussian.length)];
+					reward_prob[j][k] = Math.min(reward_prob[j][k],Math.max(1.5 - reward_prob[j][k], .25));
+					reward_prob[j][k] = Math.max(reward_prob[j][k], Math.min(0.5 - reward_prob[j][k], .75));
+				}
+			}
+			return reward_prob
+		}
+	},
+	timing_post_trial: 0,
+	timing_response: 2000,
+	nrtrials: nrtrials,
+	subid: function(){
+		return Global.ID
+	},
+	on_finish: function(data){
+			saveDataToS3()},
+};
+
+var formal_block2 = {
+	type: "daw_two_step",
+	internal_chunk_id: 1-2,
+	block:2,
+	reward_prob: function() {
+		alldata = jsPsych.data.getTrialsOfType('daw_two_step');
+		if (alldata.length==nrpracticetrials + nrtrials) {
+			return reward_prob
+		} else {
+			//drifting probabilities
+			for (j = 0; j < 2; j++) {
+				for (k = 0; k < 2; k++) {
+					reward_prob[j][k] = reward_prob[j][k]+gaussian[Math.floor(Math.random()*gaussian.length)];
+					reward_prob[j][k] = Math.min(reward_prob[j][k],Math.max(1.5 - reward_prob[j][k], .25));
+					reward_prob[j][k] = Math.max(reward_prob[j][k], Math.min(0.5 - reward_prob[j][k], .75));
+				}
+			}
+			return reward_prob
+		}
+	},
+	timing_post_trial: 0,
+	timing_response: 2000,
+	nrtrials: nrtrials,
+	subid: function(){
+		return Global.ID
+	},
+	on_finish: function(data){
+			saveDataToS3()},
+};
+
+var formal_block3 = {
+	type: "daw_two_step",
+	block:3,
+	internal_chunk_id: 1-3,
+	reward_prob: function() {
+		alldata = jsPsych.data.getTrialsOfType('daw_two_step');
+		if (alldata.length==nrpracticetrials + 2*nrtrials) {
+			return reward_prob
+		} else {
+			//drifting probabilities
+			for (j = 0; j < 2; j++) {
+				for (k = 0; k < 2; k++) {
+					reward_prob[j][k] = reward_prob[j][k]+gaussian[Math.floor(Math.random()*gaussian.length)];
+					reward_prob[j][k] = Math.min(reward_prob[j][k],Math.max(1.5 - reward_prob[j][k], .25));
+					reward_prob[j][k] = Math.max(reward_prob[j][k], Math.min(0.5 - reward_prob[j][k], .75));
+				}
+			}
+			return reward_prob
+		}
+	},
+	timing_post_trial: 0,
+	timing_response: 2000,
+	nrtrials: nrtrials,
+	subid: function(){
+		return Global.ID
+	},
+	on_finish: function(data){
+			saveDataToS3()},
+};
+
+var take_break = {
+	type: 'text',
+	text: ["<div align=center> You can take a break now. <br> When you're ready, press any key to continue. </div>"],
+}
+
+
+var demographics_block = {
+	type: "survey-text",
+	preamble: ["Please provide us with some information about yourself:"],
+	questions: [["Age", "Sex assigned at birth (m/f/other)"]],
+};
+var check_demographics_block = {
+	chunk_type: 'while',
+	timeline: [demographics_block],
+	continue_function: function(data){
+		answers = data[0].responses.split(":");
+		age_ans = answers[1].split('"')[1];
+		sex_ans = answers[2].split('"')[1];
+		totaltime = data[0].time_elapsed;
+		if ((age_ans >= 10 && age_ans <= 100)&& jQuery.isNumeric(age_ans) && (sex_ans == 'm' || sex_ans == 'f' || sex_ans == 'other')){
+			age = parseInt(age_ans);
+			sex = sex_ans;
+			// compute score
+			alldawtrials = jsPsych.data.getTrialsOfType("daw_two_step");
+			score = alldawtrials[alldawtrials.length-1].score;
+			return false;
+		} else {
+			if (!jQuery.isNumeric(age_ans))
+				alert("Please enter your age as a number (make sure to remove any spaces).");
+			if (age_ans < 18 || age_ans > 100)
+					alert("Please enter a valid age.");
+			if (sex_ans != 'm' && sex_ans != 'f' && sex_ans != 'other')
+				alert("You entered your sex incorrectly. Please write \"f\" if you are female, \"m\" if you are male, and \"other\" if you would prefer not to disclose.");
+			return true;
+		}
+	}
+}
+
+var save_subinfo_block = {
+	type: 'call-function',
+	func: function(){
+		var lasttrialdata = jsPsych.data.getLastTrialData();
+		var surveydata = jsPsych.data.getTrialsOfType("survey-likert");
+		subinfo = new Array(1);
+		subinfo[0] = {
+			subid: Global.ID,
+			age: age,
+			sex: sex,
+			final_score: score,
+			scoreindollar:score*0.01,
+			time_elapsed: lasttrialdata.time_elapsed,
+		};
+		jsPsych.data.write(subinfo[0]);
+	},
+	on_finish: function(data){
+      saveDataToS3()},
+}
+
+var score_block = {
+	type: 'text',
+	text: function(){
+		scoreindollar = score*0.01;
+		// console.log(scoreindollar);
+		if (scoreindollar > 0){
+			textscore = scoreindollar.toFixed(2);
+			var text = "<br><br><br><br>You won an additional $" + textscore + " on top of your regular payment for this study.<br><br>We will process this as soon as possible.<br><br>Press any key to continue";
+		} else {
+			var text = "<br><br><br><br>You did not win additional payment during the experiment.<br><br>Press any key to continue";
+		}
+		return text
+	},
+};
+
+var end_block = {
+	type: 'text',
+	text: ["<div align=center> This is the end of the experiment. <br> You will now complete a short survey. <br> Press any button to get redirected.</div>"],
+}
+
+/* create experiment definition array */
+var experiment = [];
+
+experiment.push(check_id_block);
+experiment.push(consent_block);
+experiment.push(welcome);
+experiment.push(practice_intro);
+experiment.push(change_colors);
+experiment.push(practice_block);
+experiment.push(change_colors_back);
+experiment.push(formal_intro);
+experiment.push(change_colors);
+experiment.push(formal_block1);
+experiment.push(take_break);
+experiment.push(formal_block2);
+experiment.push(take_break);
+experiment.push(formal_block3);
+experiment.push(check_demographics_block);
+experiment.push(save_subinfo_block);
+experiment.push(score_block);
+experiment.push(change_colors_back);
+experiment.push(end_block);
+
+jsPsych.preloadImages(images, function(){ startExperiment(); });
+
+/* start the experiment */
+function startExperiment(){
+	jsPsych.init({
+		experiment_structure: experiment,
+		on_start: function(data){
+      saveDataToS3()},
+    on_close: function(data){
+        saveDataToS3()},
+    on_finish: function(data){
+      saveDataToS3(),
+			// jsPsych.data.localSave('test.csv', 'csv')
+    window.location = "https://stanforduniversity.qualtrics.com/jfe/form/SV_77YuOB0kThNyx8y" //redirect to Qualtrics survey
+    }
+	});
+}
+</script>
+</html>

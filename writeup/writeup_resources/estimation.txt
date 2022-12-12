@@ -1,0 +1,4 @@
+1. Measure of interest: the proportion of trials where participants repeat the last reinforced first-stage
+2. Construct that it maps to: the tradeoff between model-free and based-based reinforcement learning strategies
+3. Is the estimation reported? No, they only reported the significance of the interaction of the logistic regression, but does not report the regression coefficients.
+4. Standard error.
